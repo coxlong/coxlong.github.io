@@ -7,6 +7,11 @@
 </div>
 
 <span id="more"></span>
+
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight go"><table><tr><td class="code"><pre><span class="line"><span class="keyword">var</span> a <span class="type">int64</span> = <span class="number">0</span></span><br></pre></td></tr></table></figure>
+
 <pre class="mermaid">
 
 gantt
