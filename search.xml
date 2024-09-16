@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>linux源码分析（一）初始化程序</title>
+    <url>/linux-0.12/%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%88main.c%EF%BC%89/</url>
+    <content><![CDATA[<p>系统在执行完boot&#x2F;head.s程序后就会将执行权交给main.c。该程序位于内核源代码的init目录，完成了内核初始化的所有工作。</p>
+<span id="more"></span>
+<h3 id="初始化流程"><a href="#初始化流程" class="headerlink" title="初始化流程"></a>初始化流程</h3><h3 id="源码"><a href="#源码" class="headerlink" title="源码"></a>源码</h3><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">main</span><span class="params">(<span class="type">void</span>)</span>		<span class="comment">/* This really IS void, no error here. */</span></span><br><span class="line">&#123;			<span class="comment">/* The startup routine assumes (well, ...) this */</span></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * Interrupts are still disabled. Do necessary setups, then</span></span><br><span class="line"><span class="comment"> * enable them</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"> 	ROOT_DEV = ORIG_ROOT_DEV;</span><br><span class="line"> 	SWAP_DEV = ORIG_SWAP_DEV;</span><br><span class="line">	<span class="built_in">sprintf</span>(term, <span class="string">&quot;TERM=con%dx%d&quot;</span>, CON_COLS, CON_ROWS);</span><br><span class="line">	envp[<span class="number">1</span>] = term;</span><br><span class="line">	envp_rc[<span class="number">1</span>] = term;</span><br><span class="line"> 	drive_info = DRIVE_INFO;</span><br><span class="line">	memory_end = (<span class="number">1</span>&lt;&lt;<span class="number">20</span>) + (EXT_MEM_K&lt;&lt;<span class="number">10</span>);</span><br><span class="line">	memory_end &amp;= <span class="number">0xfffff000</span>;</span><br><span class="line">	<span class="keyword">if</span> (memory_end &gt; <span class="number">16</span>*<span class="number">1024</span>*<span class="number">1024</span>)</span><br><span class="line">		memory_end = <span class="number">16</span>*<span class="number">1024</span>*<span class="number">1024</span>;		<span class="comment">// 最多管理16M内存</span></span><br><span class="line">	<span class="keyword">if</span> (memory_end &gt; <span class="number">12</span>*<span class="number">1024</span>*<span class="number">1024</span>) 		<span class="comment">// 物理内存大于12M，则设置主内存从4M开始</span></span><br><span class="line">		buffer_memory_end = <span class="number">4</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	<span class="keyword">else</span> <span class="keyword">if</span> (memory_end &gt; <span class="number">6</span>*<span class="number">1024</span>*<span class="number">1024</span>)	<span class="comment">// 物理内存大于6M，小于12M，则设置主内存从2M开始</span></span><br><span class="line">		buffer_memory_end = <span class="number">2</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	<span class="keyword">else</span>								<span class="comment">// 物理内存小于6M，则设置主内存从1M开始</span></span><br><span class="line">		buffer_memory_end = <span class="number">1</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	main_memory_start = buffer_memory_end;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> RAMDISK</span></span><br><span class="line">	main_memory_start += rd_init(main_memory_start, RAMDISK*<span class="number">1024</span>);</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">	mem_init(main_memory_start,memory_end);	<span class="comment">// 初始化主内存区</span></span><br><span class="line">	trap_init();</span><br><span class="line">	blk_dev_init();</span><br><span class="line">	chr_dev_init();</span><br><span class="line">	tty_init();</span><br><span class="line">	time_init();</span><br><span class="line">	sched_init();</span><br><span class="line">	buffer_init(buffer_memory_end);		<span class="comment">// 初始化高速缓冲区</span></span><br><span class="line">	hd_init();</span><br><span class="line">	floppy_init();</span><br><span class="line">	sti();	<span class="comment">// 开启中断</span></span><br><span class="line">	move_to_user_mode();</span><br><span class="line">	<span class="keyword">if</span> (!fork()) &#123;		<span class="comment">/* we count on this going ok */</span></span><br><span class="line">		init();</span><br><span class="line">	&#125;</span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> *   NOTE!!   For any other task &#x27;pause()&#x27; would mean we have to get a</span></span><br><span class="line"><span class="comment"> * signal to awaken, but task0 is the sole exception (see &#x27;schedule()&#x27;)</span></span><br><span class="line"><span class="comment"> * as task 0 gets activated at every idle moment (when no other tasks</span></span><br><span class="line"><span class="comment"> * can run). For task0 &#x27;pause()&#x27; just means we go check if some other</span></span><br><span class="line"><span class="comment"> * task can run, and if not we return here.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line">	<span class="keyword">for</span>(;;)</span><br><span class="line">		__asm__(<span class="string">&quot;int $0x80&quot;</span>::<span class="string">&quot;a&quot;</span> (__NR_pause):<span class="string">&quot;ax&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>linux-0.12</category>
+      </categories>
+      <tags>
+        <tag>linux内核</tag>
+        <tag>init</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Hadoop集群搭建教程</title>
+    <url>/tools/Hadoop%E9%9B%86%E7%BE%A4%E6%90%AD%E5%BB%BA%E6%95%99%E7%A8%8B/</url>
+    <content><![CDATA[<h3 id="环境安装"><a href="#环境安装" class="headerlink" title="环境安装"></a>环境安装</h3><h4 id="准备虚拟机"><a href="#准备虚拟机" class="headerlink" title="准备虚拟机"></a>准备虚拟机</h4><p>使用VMware或hyper-v创建三台虚拟机（系统为Ubuntu18.04）。</p>
+<span id="more"></span>
+
+<h4 id="设置静态IP、修改主机名和hosts"><a href="#设置静态IP、修改主机名和hosts" class="headerlink" title="设置静态IP、修改主机名和hosts"></a>设置静态IP、修改主机名和hosts</h4><ul>
+<li><p>设置静态IP</p>
+<p>修改目录&#x2F;etc&#x2F;netplan下的配置文件01-netcfg.yaml（文件名可能不一样）</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop:~# vim /etc/netplan/01-netcfg.yaml</span><br></pre></td></tr></table></figure>
+
+<p>将dhcp4更改为no，并设置IP地址、网关和DNS服务器，配置如下</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_"># </span><span class="language-bash">This file describes the network interfaces available on your system</span></span><br><span class="line"><span class="meta prompt_"># </span><span class="language-bash">For more information, see netplan(5).</span></span><br><span class="line">network:</span><br><span class="line">  version: 2</span><br><span class="line">  renderer: networkd</span><br><span class="line">  ethernets:</span><br><span class="line">    eth0:</span><br><span class="line">      dhcp4: no</span><br><span class="line">      addresses: [172.22.160.101/20]    #IP地址和掩码</span><br><span class="line">      gateway4: 172.22.160.1            #网关</span><br><span class="line">      nameservers:                      #DNS</span><br><span class="line">              addresses: [114.114.114.114]</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>另外两台主机的IP分别为：172.22.160.102、172.22.160.103</p>
+<p><strong>注意：</strong>IP设置成自己的，确保三台主机在同一局域网下，且能够相互ping通</p>
+</li>
+<li><p>修改主机名</p>
+<p>将3台主机名修改成不同的名称，分别为Hadoop101、Hadoop102、Hadoop103，便于区分。</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">vi /etc/hostname</span><br></pre></td></tr></table></figure></li>
+<li><p>修改hosts文件</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">vi /etc/hosts</span><br></pre></td></tr></table></figure>
+
+<p>添加以下三条记录（IP需要修改成自己的）</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">172.22.160.101	Hadoop101</span><br><span class="line">172.22.160.102	Hadoop102</span><br><span class="line">172.22.160.103	Hadoop103</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="配置ssh"><a href="#配置ssh" class="headerlink" title="配置ssh"></a>配置ssh</h4><h5 id="安装ssh"><a href="#安装ssh" class="headerlink" title="安装ssh"></a>安装ssh</h5><p>检查是否安装了ssh</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# ps -e | grep ssh</span><br><span class="line"> 1048 ?        00:00:00 sshd</span><br><span class="line"> 1097 ?        00:00:00 sshd</span><br><span class="line"> 1217 ?        00:00:00 sshd</span><br></pre></td></tr></table></figure>
+
+<p>若没有出现上述信息，则需要安装ssh</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">apt-get install openssh-server</span><br></pre></td></tr></table></figure>
+
+<h5 id="允许root通过ssh登录"><a href="#允许root通过ssh登录" class="headerlink" title="允许root通过ssh登录"></a>允许root通过ssh登录</h5><p>修改sshd_config文件</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">hadoop@Hadoop102:~$ sudo vim /etc/ssh/sshd_config</span><br></pre></td></tr></table></figure>
+
+<p>找到PermitRootLogin，修改为如下</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">#</span><span class="language-bash">LoginGraceTime 2m</span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">PermitRootLogin prohibit-password</span></span><br><span class="line">PermitRootLogin yes</span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">StrictModes <span class="built_in">yes</span></span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">MaxAuthTries 6</span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">MaxSessions 10</span></span><br></pre></td></tr></table></figure>
+
+<h5 id="设置免密登录"><a href="#设置免密登录" class="headerlink" title="设置免密登录"></a>设置免密登录</h5><p>在主机Hadoop101上生成密钥公钥对</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# ssh-keygen -t rsa</span><br></pre></td></tr></table></figure>
+
+<p>将公钥发送到主机Hadoop102和Hadoop103</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# ssh-copy-id hadoop102</span><br><span class="line">root@Hadoop101:~# ssh-copy-id hadoop103</span><br></pre></td></tr></table></figure>
+
+<h4 id="编写分发脚本"><a href="#编写分发脚本" class="headerlink" title="编写分发脚本"></a>编写分发脚本</h4><p>一般情况下，服务器的数量比较多，在每台服务器上分别配置Hadoop不太现实，rsync可以将文件同步到其他服务器，以下脚本可以群发</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">#</span><span class="language-bash">!/bin/bash</span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">1 获取输入参数个数，如果没有参数，直接退出</span></span><br><span class="line">pcount=$#</span><br><span class="line">if((pcount==0)); then</span><br><span class="line">echo no args;</span><br><span class="line">exit;</span><br><span class="line">fi</span><br><span class="line"><span class="meta prompt_"></span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">2 获取文件名称</span></span><br><span class="line">p1=$1</span><br><span class="line">fname=`basename $p1`</span><br><span class="line">echo fname=$fname</span><br><span class="line"><span class="meta prompt_"></span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">3 获取上级目录到绝对路径</span></span><br><span class="line">pdir=`cd -P $(dirname $p1); pwd`</span><br><span class="line">echo pdir=$pdir</span><br><span class="line"><span class="meta prompt_"></span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">4 获取当前用户名称</span></span><br><span class="line">user=`whoami`</span><br><span class="line"><span class="meta prompt_"></span></span><br><span class="line"><span class="meta prompt_">#</span><span class="language-bash">5 循环，这里host根据自己的节点数和主机名设置</span></span><br><span class="line">for((host=102; host&lt;104; host++)); do</span><br><span class="line">        #echo $pdir/$fname $user@hadoop$host:$pdir</span><br><span class="line">        echo --------------- hadoop$host ----------------</span><br><span class="line">        rsync -rvl $pdir/$fname $user@hadoop$host:$pdir</span><br><span class="line">done</span><br></pre></td></tr></table></figure>
+
+<p>将脚本放在&#x2F;usr&#x2F;sbin目录下，并赋予777权限</p>
+<h4 id="安装jre和Hadoop"><a href="#安装jre和Hadoop" class="headerlink" title="安装jre和Hadoop"></a>安装jre和Hadoop</h4><p>解压server-jre-8u261-linux-x64.tar.gz到&#x2F;usr&#x2F;java</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# mkdir /usr/java</span><br><span class="line">root@Hadoop101:~# tar -zxvf server-jre-8u261-linux-x64.tar.gz</span><br><span class="line">root@Hadoop101:~# mv jdk1.8.0_261/ /usr/java/</span><br></pre></td></tr></table></figure>
+
+<p>解压hadoop-3.2.1.tar.gz到&#x2F;usr&#x2F;hadoop</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# mkdir /usr/hadoop</span><br><span class="line">root@Hadoop101:~# tar -zxvf hadoop-3.2.1.tar.gz</span><br><span class="line">root@Hadoop101:~# mv hadoop-3.2.1 /usr/hadoop/</span><br></pre></td></tr></table></figure>
+
+<p>添加环境变量</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">vim /etc/profile</span><br></pre></td></tr></table></figure>
+
+<p>添加以下内容：</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">export JAVA_HOME=/usr/java/jdk1.8.0_261</span><br><span class="line">export HADOOP_HOME=/usr/hadoop/hadoop-3.2.1</span><br><span class="line">export PATH=$PATH:$&#123;JAVA_HOME&#125;/bin:$&#123;HADOOP_HOME&#125;/bin</span><br></pre></td></tr></table></figure>
+
+<h3 id="配置Hadoop集群"><a href="#配置Hadoop集群" class="headerlink" title="配置Hadoop集群"></a>配置Hadoop集群</h3><p>切换到目录&#x2F;usr&#x2F;hadoop&#x2F;hadoop-3.2.1&#x2F;etc&#x2F;hadoop&#x2F;，修改配置文件</p>
+<h4 id="hadoop-env-sh"><a href="#hadoop-env-sh" class="headerlink" title="hadoop-env.sh"></a>hadoop-env.sh</h4><p>在该文件中添加JAVA_HOME</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_"># </span><span class="language-bash">The java implementation to use. By default, this environment</span></span><br><span class="line"><span class="meta prompt_"># </span><span class="language-bash">variable is REQUIRED on ALL platforms except OS X!</span></span><br><span class="line">export JAVA_HOME=/usr/java/jdk1.8.0_261</span><br></pre></td></tr></table></figure>
+
+<h4 id="core-site-xml"><a href="#core-site-xml" class="headerlink" title="core-site.xml"></a>core-site.xml</h4><figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- 指定HDFS中NameNode的地址 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>fs.defaultFS<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>hdfs://hadoop101:9000<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">&lt;!-- 指定Hadoop运行时产生文件的存储目录 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>hadoop.tmp.dir<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>/usr/hadoop/hadoop-3.2.1/tmp<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="hdfs-site-xml"><a href="#hdfs-site-xml" class="headerlink" title="hdfs-site.xml"></a>hdfs-site.xml</h4><figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- hdfs存储数据的副本数量（避免一台宕机），可以不设置，默认值是3 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>dfs.replication<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>2<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"> </span><br><span class="line"><span class="comment">&lt;!--hdfs 监听namenode的web的地址，默认就是9870端口，如果不改端口也可以不设置 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>dfs.namenode.http-address<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>hadoop101:9870<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line">      </span><br><span class="line"><span class="comment">&lt;!-- hdfs保存datanode当前数据的路径，默认值需要配环境变量，建议使用自己创建的路径，方便管理--&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>dfs.datanode.data.dir<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>/usr/hadoop/hadoop-3.2.1/hdfs/data<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"> </span><br><span class="line"><span class="comment">&lt;!-- hdfs保存namenode当前数据的路径，默认值需要配环境变量，建议使用自己创建的路径，方便管理--&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>dfs.namenode.name.dir<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>/usr/hadoop/hadoop-3.2.1/hdfs/name<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"> </span><br></pre></td></tr></table></figure>
+
+<h4 id="yarn-site-xml"><a href="#yarn-site-xml" class="headerlink" title="yarn-site.xml"></a>yarn-site.xml</h4><figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- 必须配置指定YARN的老大（ResourceManager）在哪一台主机 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>yarn.resourcemanager.hostname<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>hadoop101<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"> </span><br><span class="line"><span class="comment">&lt;!-- 必须配置提供mapreduce程序获取数据的方式 默认为空 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>yarn.nodemanager.aux-services<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>mapreduce_shuffle<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="mapred-site-xml"><a href="#mapred-site-xml" class="headerlink" title="mapred-site.xml"></a>mapred-site.xml</h4><figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- 必须设置，mapreduce程序使用的资源调度平台，默认值是local，若不改就只能单机运行，不会到集群上了 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>mapreduce.framework.name<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span>yarn<span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- 这是3.2以上版本需要增加配置的，不配置运行mapreduce任务可能会有问题，记得使用自己的路径 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">property</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">name</span>&gt;</span>mapreduce.application.classpath<span class="tag">&lt;/<span class="name">name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">value</span>&gt;</span></span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/etc/hadoop,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/common/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/common/lib/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/hdfs/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/hdfs/lib/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/mapreduce/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/mapreduce/lib/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/yarn/*,</span><br><span class="line">        /usr/hadoop/hadoop-3.2.1/share/hadoop/yarn/lib/*</span><br><span class="line">    <span class="tag">&lt;/<span class="name">value</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">property</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="配置workers"><a href="#配置workers" class="headerlink" title="配置workers"></a>配置workers</h4><p>配置需要启动datanode节点的主机</p>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line">hadoop101</span><br><span class="line">hadoop102</span><br><span class="line">hadoop103</span><br></pre></td></tr></table></figure>
+
+<h4 id="分发配置文件"><a href="#分发配置文件" class="headerlink" title="分发配置文件"></a>分发配置文件</h4><p>将配置好的文件分发到主机hadoop102和hadoop103上</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">xsync /usr/hadoop/hadoop-3.2.1/etc/hadoop/</span><br></pre></td></tr></table></figure>
+
+<h4 id="启动集群"><a href="#启动集群" class="headerlink" title="启动集群"></a>启动集群</h4><p>在&#x2F;hadoop&#x2F;sbin路径下，将以下参数添加到start-dfs.sh和stop-dfs.sh的顶部</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">HDFS_DATANODE_USER=root</span><br><span class="line">HADOOP_SECURE_DN_USER=hdfs</span><br><span class="line">HDFS_NAMENODE_USER=root</span><br><span class="line">HDFS_SECONDARYNAMENODE_USER=root</span><br></pre></td></tr></table></figure>
+
+<p>将以下参数添加到start-yarn.sh和stop-yarn.sh的顶部</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">YARN_RESOURCEMANAGER_USER=root</span><br><span class="line">HADOOP_SECURE_DN_USER=yarn</span><br><span class="line">YARN_NODEMANAGER_USER=root</span><br></pre></td></tr></table></figure>
+
+<p>启动hdfs</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">root@Hadoop101:~# start-dfs.sh</span><br></pre></td></tr></table></figure>]]></content>
+      <categories>
+        <category>其它</category>
+      </categories>
+      <tags>
+        <tag>Hadoop</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>使用vs code和wsl搭建C/C++开发环境</title>
+    <url>/tools/%E4%BD%BF%E7%94%A8vs%20code%E5%9C%A8wsl%E4%B8%8B%E8%B0%83%E8%AF%95c++%E4%BB%A3%E7%A0%81/</url>
+    <content><![CDATA[<h4 id="安装WSL-2"><a href="#安装WSL-2" class="headerlink" title="安装WSL 2"></a>安装WSL 2</h4><p>按照<a href="https://docs.microsoft.com/zh-cn/windows/wsl/">官方文档</a>安装子系统，建议使用WSL 2。WSL 2 使用最新、最强大的虚拟化技术在轻量级实用工具虚拟机 (VM) 中运行 Linux 内核。 但是，WSL 2 不是传统的 VM 体验。</p>
+<span id="more"></span>
+<p><img src="https://images.coxlong.cn/img/20210206213937.png" alt="image-20210206213930600"></p>
+<p>除了跨操作系统文件系统的性能外，WSL 2 体系结构在多个方面都比 WSL 1 更具优势。</p>
+<h4 id="安装VS-Code及插件"><a href="#安装VS-Code及插件" class="headerlink" title="安装VS Code及插件"></a>安装VS Code及插件</h4><p>在Windows上安装<a href="https://code.visualstudio.com/">VS Code</a>并安装<a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack">远程开发扩展包</a>。</p>
+<p>VS Code有很多插件，建议安装语言包和Visual Studio IntelliCode。</p>
+<p><img src="https://images.coxlong.cn/img/20210206215838.png" alt="image-20210206215838016"></p>
+<p><img src="https://images.coxlong.cn/img/20210206220013.png" alt="image-20210206220013562"></p>
+<p><img src="https://images.coxlong.cn/img/20210206220058.png" alt="image-20210206220058492"></p>
+<h4 id="安装编译器、调试器"><a href="#安装编译器、调试器" class="headerlink" title="安装编译器、调试器"></a>安装编译器、调试器</h4><p>在子系统里面安装编译器gcc和g++以及调试器gdb。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">sudo apt -y install gcc g++ gdb</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://images.coxlong.cn/img/20210206221905.png" alt="image-20210206221905641"></p>
+<h4 id="调试代码"><a href="#调试代码" class="headerlink" title="调试代码"></a>调试代码</h4><p>在子系统里面输入以下命令打开VS Code。</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">code .</span><br></pre></td></tr></table></figure>
+
+<p>第一次从子系统打开VS Code会自动安装一些插件，等待安装完成即可。</p>
+<p><img src="https://images.coxlong.cn/img/20210206222154.png" alt="image-20210206222154233"></p>
+<p>打开VS Code的插件安装界面，会提示在wsl里面安装相应插件，点击即可。</p>
+<p><img src="https://images.coxlong.cn/img/20210206222430.png" alt="image-20210206222430610"></p>
+<p>然后打开资源管理器，新建一个cpp源文件并写个hello world。</p>
+<p><img src="https://images.coxlong.cn/img/20210206222856.png" alt="image-20210206222855891"></p>
+<p>最后打开调试界面，点击运行和调试，选择GDB，然后选择g++。</p>
+<p><img src="https://images.coxlong.cn/img/20210206223335.png" alt="image-20210206223335217"></p>
+<p><img src="https://images.coxlong.cn/img/20210206223858.png" alt="image-20210206223858343"></p>
+<p>此时，文件目录下会多出一个.vscode文件夹，包含两个配置文件。</p>
+<p><img src="https://images.coxlong.cn/img/20210206224009.png" alt="image-20210206224009387"></p>
+<p>至此，配置大功告成，接下来就可以加断点调试代码啦！<code>F5</code>是开始运行，<code>F11</code>是单步调试，<code>F10</code>是单步跳过。</p>
+]]></content>
+      <categories>
+        <category>其它</category>
+      </categories>
+      <tags>
+        <tag>vscode</tag>
+        <tag>wsl</tag>
+      </tags>
+  </entry>
+</search>
